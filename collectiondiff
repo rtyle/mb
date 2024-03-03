@@ -22,8 +22,8 @@ DESCRIPTION
     followed by the ones that are common (no tag)
     and then the ones that are on musicbrainz only ('>' tagged on the end).
 
-    This depends musicbrainz user dependent configuration in user.py.
-    See instructions in user.py_.
+    This needs musicbrainz user dependent configuration in user.py.
+    Copy template from user.py_ and see instructions.
 
 EXAMPLES
     For all flac and mp3 files under the current directory,
