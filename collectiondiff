@@ -80,12 +80,12 @@ near = near - user.ignore
 
 # exclusively near
 for id in near - far:
-    print(f"https://musicbrainz.org/release/{id}.html\t<")
+    print(f"https://musicbrainz.org/release/{id}\t<")
 
 # common
 for id in near & far:
-    print(f"https://musicbrainz.org/release/{id}.html")
+    print(f"https://musicbrainz.org/release/{id}")
 
 # exclusively far
 for id in far - near:
-    print(f"https://musicbrainz.org/release/{id}.html\t>")
+    print(f"https://musicbrainz.org/release/{id}\t>")
