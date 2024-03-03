@@ -1,0 +1,154 @@
+#!/usr/bin/python
+
+import argparse
+import musicbrainzngs
+import sys
+import textwrap
+
+import user
+
+parser = argparse.ArgumentParser(
+    formatter_class=argparse.RawDescriptionHelpFormatter,
+    description="List details of each MusicBrainz release identified on stdin",
+    epilog=textwrap.dedent(
+        """
+SYNOPSIS
+    lsmb < collection.txt
+
+DESCRIPTION
+    MusicBrainz releases are specified on standard input as the first field
+    on tab delimited lines.
+    This may be a full MusicBrainz release URL, which contains the MusicBrainz
+    release identifier, or just the MusicBrainz release identifier.
+    Empty fields (and, so, indented lines) are ignored.
+    This allows the output from this command to later be used as input.
+
+    No output is generated until all input is consumed.
+    Output is sorted based on the following release keys, in order:
+
+         Album artist sort name
+         Album artist name
+         Date of first related release
+         Date of this release
+         Album title
+         MusicBrainz release id
+
+    Each release is output using three indentation levels.
+
+    The first (unindented) level consists of one tab delimited line for each
+    release that contains the following fields, in order:
+
+         MusicBrainz release URL for release
+         Album artist sort name
+         Album artist name
+         Date of first related release
+         Date of this release
+         Album title
+
+    The second indentation level is used to nest media under each release and
+    contains the following tab delimited information, in order:
+
+         Medium format (e.g. CD)
+         Medium title (if provided)
+
+    The third indentation level is used to nest tracks under each medium and
+    contains the following tab delimited information, in order:
+
+         Track title
+         Track artist (only if different than album artist)
+
+EXAMPLES
+
+    Compare all releases referenced from all flac and mp3 files
+    under the current directory with those in our MusicBrainz collection and,
+    for those that are not represented by a file,
+    generate a listing and save it to other.collection.txt
+
+        find . -name \*.flac -o -name \*.mp3 | collectiondiff | grep \>\$ | lsmb > other.collection.txt
+"""
+    ),
+)
+args = parser.parse_args()
+
+musicbrainzngs.auth(user.name, user.password)
+musicbrainzngs.set_useragent("lsmb", "0", user.contact)
+
+# return the first d[k] found for d in ds, else v
+def vkds(v: str, k: str, *ds: list[dict[str]]) -> str:
+    for d in ds:
+        if k in d:
+            return d[k]
+    return v
+
+
+def credits(artist_credit: list) -> tuple[str, str]:
+    sort_name: list[str] = []
+    name: list[str] = []
+    for part in artist_credit:
+        if isinstance(part, str):
+            sort_name.append(part)
+            name.append(part)
+        else:
+            artist = part["artist"]
+            sort_name.append(artist["sort-name"])
+            name.append(artist["name"])
+    return "".join(sort_name), "".join(name)
+
+
+release: dict[str, dict] = {}
+
+
+def add(id: str) -> None:
+    value: dict = musicbrainzngs.get_release_by_id(
+        id, ["artist-credits", "media", "recordings", "release-groups"]
+    )["release"]
+    key: list[str] = []
+    key.extend(credits(value["artist-credit"]))
+    key.append(vkds("", "first-release-date", value["release-group"]))
+    key.append(vkds("", "date", value))
+    key.append(value["title"])
+    key.append(id)
+    release["\t".join(key)] = value
+
+
+for line in sys.stdin:
+    id: str = line.rstrip().split("\t")[0].split("/")[-1].split(".")[0]
+    if 0 < len(id):
+        add(id)
+        sys.stderr.write(".")
+        sys.stderr.flush()
+
+sys.stderr.write(f"\t{len(release)}\n")
+
+keys: list[str] = list(release.keys())
+keys.sort()
+for key in keys:
+    value = release[key]
+    credit_sort, credit, date_first, date, title, id = key.split("\t")
+    print(
+        "\t".join(
+            [
+                f"https://musicbrainz.org/release/{id}",
+                credit_sort,
+                credit,
+                date_first,
+                date,
+                title,
+            ]
+        )
+    )
+
+    for medium in value["medium-list"]:
+        label: list[str] = ["", medium["format"]]
+        if "title" in medium:
+            label.append(medium["title"])
+        print("\t".join(label))
+
+        for track in medium["track-list"]:
+            label: list[str] = ["", ""]
+            recording = track["recording"]
+            label.append(vkds(None, "title", track, recording))
+            _, track_credit = credits(vkds(None, "artist-credit", track, recording))
+            if track_credit != credit:
+                label.append(track_credit)
+            print("\t".join(label))
