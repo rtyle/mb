@@ -1,5 +1,5 @@
 # mb
-Tools for managing a music library with files that are tagged (associated with) musicbrainz (mb) resources.
+Tools for managing a music library with files that are tagged (associated with) MusicBrainz (mb) resources.
 These were developed in/for a Fedora Linux environment.
 Your mileage may vary elsewhere.
 
@@ -10,7 +10,7 @@ Git this repository as appropriate. For examples,
     git clone https://github.com/rtyle/mb.git
     git clone git@github.com:rtyle/mb.git
 
-Customize for the musicbrainz user, as file comments suggest.
+Customize for the MusicBrainz user, as file comments suggest.
 
     cd mb
     cp user.py{_,}
@@ -24,7 +24,13 @@ Customize for the musicbrainz user, as file comments suggest.
 ## Tools
 
 ### collectiondiff
-Used to report differences between a collection of files and a musicbrainz collection of releases.
+Used to report differences between a collection of files and a MusicBrainz collection of releases.
 See built-in help.
 
     ./collectiondiff --help
+
+### lsmb
+List details of each MusicBrainz release identified on stdin.
+See built-in help.
+
+    ./lsmb --help
