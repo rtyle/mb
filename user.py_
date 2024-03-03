@@ -1,0 +1,13 @@
+# fill in values and rename to user.py
+
+name = ""       # musicbrainz api user name
+password = ""   # musicbrainz api user password
+
+contact = ""    # musicbrainz api contact
+
+collection = "" # musicbrainz user collection mbid
+
+ignore = set(   # ignore local uuids that do not exist in musicbrainz
+    [
+    ]
+)

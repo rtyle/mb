@@ -1,0 +1,91 @@
+#!/usr/bin/python
+
+import argparse
+import musicbrainzngs
+import mutagen
+import sys
+import textwrap
+
+import user
+
+parser = argparse.ArgumentParser(
+    formatter_class=argparse.RawDescriptionHelpFormatter,
+    description="Output musicbrainz URLs that reflect collection differences",
+    epilog=textwrap.dedent(
+        """
+SYNOPSIS
+    find . -type f -name *.flac -o -name \*.mp3 | collectiondiff
+
+DESCRIPTION
+    Given a list of tagged files on standard input
+    output the musicbrainz URLs that are local only ('<', tagged on the end)
+    followed by the ones that are common (no tag)
+    and then the ones that are on musicbrainz only ('>' tagged on the end).
+
+    This depends musicbrainz user dependent configuration in user.py.
+    See instructions in user.py_.
+
+EXAMPLES
+    For all flac and mp3 files under the current directory,
+    report those that are exclusive to the musicbrainz collection
+
+        find . -name \*.flac -o -name \*.mp3 | collectiondiff | grep \>\$
+
+    For all flac and mp3 files under the current directory,
+    report those that are exclusive to the local collection
+
+        find . -name \*.flac -o -name \*.mp3 | collectiondiff | grep \<\$
+"""
+    ),
+)
+args = parser.parse_args()
+
+musicbrainzngs.auth(user.name, user.password)
+musicbrainzngs.set_useragent("collectiondiff", "0", user.contact)
+
+# get the (far) set of release mbids from musicbrainz user.collection,
+# a chunk at a time
+far = set()
+while True:
+    chunk = musicbrainzngs.get_releases_in_collection(user.collection, 10000, len(far))[
+        "collection"
+    ]["release-list"]
+    if 0 == len(chunk):
+        break
+    far = far | set(map(lambda release: release["id"], chunk))
+    sys.stderr.write(".")
+    sys.stderr.flush()
+
+sys.stderr.write(f"\t{len(far)}\n")
+
+# get the (near) set of release mbids from tagged files on disc,
+# a file path at a time (each specified as a line on stdin).
+near = set()
+for line in sys.stdin:
+    path = line.rstrip()
+    try:
+        tags = mutagen.File(path)
+    except mutagen.MutagenError:
+        continue
+    else:
+        for tag in ["musicbrainz_albumid", "TXXX:MusicBrainz Album Id"]:
+            if tag in tags:
+                near.add(tags[tag][0])
+        sys.stderr.write(".")
+        sys.stderr.flush()
+
+sys.stderr.write(f"\t{len(near)}\n")
+
+near = near - user.ignore
+
+# exclusively near
+for id in near - far:
+    print(f"https://musicbrainz.org/release/{id}.html\t<")
+
+# common
+for id in near & far:
+    print(f"https://musicbrainz.org/release/{id}.html")
+
+# exclusively far
+for id in far - near:
+    print(f"https://musicbrainz.org/release/{id}.html\t>")
