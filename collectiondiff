@@ -77,6 +77,7 @@ for line in sys.stdin:
 sys.stderr.write(f"\t{len(near)}\n")
 
 near = near - user.ignore
+far = far - user.ignore
 
 # exclusively near
 for id in near - far:

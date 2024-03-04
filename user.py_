@@ -7,7 +7,7 @@ contact = ""    # musicbrainz api contact
 
 collection = "" # musicbrainz user collection mbid
 
-ignore = set(   # ignore local uuids that do not exist in musicbrainz
+ignore = set(   # ignore mbids
     [
     ]
 )
