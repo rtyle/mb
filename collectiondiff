@@ -56,6 +56,7 @@ while True:
     sys.stderr.write(".")
     sys.stderr.flush()
 
+far = far - user.ignore
 sys.stderr.write(f"\t{len(far)}\n")
 
 # get the (near) set of release mbids from tagged files on disc,
@@ -74,10 +75,8 @@ for line in sys.stdin:
         sys.stderr.write(".")
         sys.stderr.flush()
 
-sys.stderr.write(f"\t{len(near)}\n")
-
 near = near - user.ignore
-far = far - user.ignore
+sys.stderr.write(f"\t{len(near)}\n")
 
 # exclusively near
 for id in near - far:
