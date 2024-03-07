@@ -34,3 +34,9 @@ List details of each MusicBrainz release identified on stdin.
 See built-in help.
 
     ./lsmb --help
+
+### tags
+Apply tags from rules in files along the path to targets identified on stdin.
+See built-in help.
+
+    ./tags --help
