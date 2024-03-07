@@ -1,0 +1,225 @@
+#!/usr/bin/python
+
+import argparse
+import mutagen
+import pathlib
+import re
+import sys
+import textwrap
+
+parser = argparse.ArgumentParser(
+    formatter_class=argparse.RawDescriptionHelpFormatter,
+    description="Tag files named on STDIN per rules in adjacent files named tags",
+    epilog=textwrap.dedent(
+        """
+SYNOPSIS
+
+    tags [--help]
+
+    find . -name \*.flac -o -name \*.mp3 |\\
+    tags [--run] [--tags TAGS]
+
+DESCRIPTION
+
+    Read target file names on standard input
+    and expect that along the path to each there might be files named tags
+    (or TAGS if the --tags TAGS option is specified)
+    which contribute rules to consider for tagging the target file.
+
+    Each line in a tags file specifies a rule.
+    The parts of a rule are separated by tabs.
+
+    The 1st part (r) must be a python compilable regular expression;
+    otherwise, the rule is ignored.
+    It is replaced with a compilation of itself.
+        r = re.compile(r)
+    This will be used to evaluate
+        _ = re.findall(r, p)
+    where p is the path to a target file relative to the tags file's parent.
+    A rule will only be applied to a target file if
+        0 < len(_)
+    
+    The 2nd part (b) must be a python boolean expression
+    that may be expressed in terms of _.
+    If b is empty, it is replaced with "True".
+    A rule will only be applied to a target file if
+        eval(b, {}, {"_": _})
+
+    The 3rd part (k) must specify a non-empty tag key;
+    otherwise, the rule is ignored.
+
+    The remaining (4th, ...) parts are used to supply values for the tag.
+    If no values are given, the tag should be removed from the target file;
+    otherwise, the tag should be given the supplied values in the target file.
+
+    If the identified tag (k) contains any (illegal) = characters,
+    they are removed and each value is evaluated as a python string expression
+    that may be expressed in terms of _.
+
+    Rules are applied in the order they appear in each tags file
+    and tags files are ordered from the furthest to the nearest
+    relative to the target file.
+
+    If the value(s) of a tag in a target file differs
+    from the value(s) suggested by the application of its rules
+    then this is indicated by outputting a tab delimited line with
+        the name of the file
+        the name of the tag
+        the old values
+        →
+        the new values
+    
+    tags just reports the changes that should be made but does not make them.
+    unless the --run option is specified.
+
+EXAMPLES
+
+        find music -name \*.flac | tags
+
+    If files are organized in a music/ARTIST/ALBUM/FILE folder structure
+    and this path information is included in the target files named on STDIN
+    then, for each ARTIST, ALBUM, FILE specified,
+    rules from the following files will be considered (if/as they exist):
+
+        music/tags
+        music/ARTIST/tags
+        music/ARTIST/ALBUM/tags
+
+    Rules in music/tags will be considered first
+    for everything organized under the music folder.
+    For example,
+
+\t\tOWNER\tJOE
+.*/(\d+)\tTRACKNUMBER=\tf"{int(_[0])}"
+
+    The first rule dictates that every file under music
+    should be tagged with the same OWNER (JOE).
+    The second rule says to tag every file that begins with a decimal number
+    with a TRACKNUMBER that matches.
+
+    Rules in music/ARTIST/tags will be considered next
+    for everything organized under the music/ARTIST folder.
+    For example,
+
+\t\tARTIST\tTHE ARTIST NAME
+\t\tARTISTSORT\tARTIST NAME, THE
+
+    These rules dictate that every file under music/ARTIST
+    should have ARTIST and ARTISTSORT tags
+    that reflect the name of the artist (THE ARTIST NAME and ARTIST NAME, THE).
+
+    Rules in music/ARTIST/ALBUM/tags will be considered last
+    for everything organized under the music/ARTIST/ALBUM folder.
+    For example,
+
+\t\tALBUM\tFIRST ALBUM
+\t\tDATE\t1974
+^(\d+)\t_[0] < 5\tARTIST\tTHE ORIGINAL ARTIST NAME
+^(\d+)\t_[0] < 5\tARTISTSORT\tORIGINAL ARTIST NAME, THE
+
+    These rules dictate the every file under music/ARTIST/ALBUM
+    should have ALBUM set to FIRST ALBUM and DATE set to 1974.
+    Assuming that a FILE starts with a track number then
+    tracks numbered less than 5 should (perhaps, override)
+    the name of the artist as THE ORIGINAL ARTIST NAME.
+"""
+    ),
+)
+parser.add_argument("-r", "--run", action="store_true", help="change files")
+parser.add_argument(
+    "-t", "--tags", action="store", default="tags", help="name of tags files"
+)
+args = parser.parse_args()
+
+
+def cmp(a, b) -> int:
+    return -1 if a < b else 1 if b < a else 0
+
+
+def cmpl(al: list, bl: list) -> int:
+    for a, b in zip(al, bl):
+        c = cmp(a, b)
+        if 0 != c:
+            return c
+    return -1 if len(al) < len(bl) else 1 if len(bl) < len(al) else 0
+
+
+cache: dict[str, list[list[str]]] = {}
+
+
+def rules(parent: pathlib.Path) -> list[list[str]]:
+    key: str = str(parent)
+    if key not in cache:
+        cache[key] = value = []
+        child = parent / args.tags
+        if child.is_file():
+            with child.open() as file:
+                for line in file:
+                    parts: list[str] = line.rstrip().split("\t")
+                    if 2 < len(parts):
+                        r, b, *kv = parts
+                        try:
+                            r = re.compile(r)
+                        except Exception as e:
+                            sys.stderr.write("\t".join([str(child), *parts, e]))
+                            continue
+                        if 0 == len(b):
+                            b = "True"
+                        value.append([r, b, *kv])
+    return cache[key]
+
+
+def tags(path: pathlib.Path) -> dict[str, list[str]]:
+    t = {}
+    for parent in reversed(path.parents):
+        p = str(path.relative_to(parent))
+        for rule in rules(parent):
+            r, b, k, *v = rule
+            _ = re.findall(r, p)
+            if 0 < len(_):
+                try:
+                    b_ = eval(b, {}, {"_": _})
+                except Exception as e:
+                    sys.stderr.write("\t".join([str(path), b, "_", *_, str(e)]))
+                    continue
+                if b_:
+                    k_ = k.replace("=", "")
+                    if k != k_:
+                        k = k_
+                        v_ = []
+                        for s in v:
+                            try:
+                                s_ = eval(s, {}, {"_": _})
+                            except Exception as e:
+                                sys.stderr.write(
+                                    "\t".join([str(path), s, "_", *_, str(e)])
+                                )
+                                continue
+                            v_.append(s_)
+                        v = v_
+                t[k] = v
+    return t
+
+
+for line in sys.stdin:
+    p = line.rstrip()
+    path = pathlib.Path(p)
+    if not path.is_file():
+        continue
+    tp = tags(path)
+    if 0 < len(tp):
+        try:
+            f = mutagen.File(path)
+        except Exception as e:
+            sys.stderr.write("\t".join([p, str(e)]))
+            continue
+        for k, vp in tp.items():
+            vf = [] if not k in f.tags else f.tags[k]
+            if 0 != cmpl(vf, vp):
+                print("\t".join([p, k, *vf, "→", *vp]))
+                if args.run:
+                    if 0 < len(vp):
+                        f.tags[k] = vp
+                    else:
+                        del f.tags[k]
+                    f.save()
