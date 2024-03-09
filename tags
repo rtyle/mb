@@ -1,15 +1,16 @@
 #!/usr/bin/python
 
 import argparse
-import mutagen
 import pathlib
 import re
 import sys
 import textwrap
 
+import mutagen
+
 parser = argparse.ArgumentParser(
     formatter_class=argparse.RawDescriptionHelpFormatter,
-    description="Tag files named on STDIN per rules in adjacent files named tags",
+    description="Tag files named on STDIN per rules in tags files along path",
     epilog=textwrap.dedent(
         """
 SYNOPSIS
@@ -17,7 +18,7 @@ SYNOPSIS
     tags [--help]
 
     find . -name \*.flac -o -name \*.mp3 |\\
-    tags [--run] [--tags TAGS]
+    tags [--save] [--tags TAGS]
 
 DESCRIPTION
 
@@ -36,8 +37,9 @@ DESCRIPTION
     This will be used to evaluate
         _ = re.findall(r, p)
     where p is the path to a target file relative to the tags file's parent.
-    A rule will only be applied to a target file if
+    A rule will only be applied to a target file if ...
         0 < len(_)
+    ... which will be the case for an empty regular expression.
     
     The 2nd part (b) must be a python boolean expression
     that may be expressed in terms of _.
@@ -47,7 +49,11 @@ DESCRIPTION
 
     The 3rd part (k) must specify a non-empty tag key;
     otherwise, the rule is ignored.
-
+    The tag key is expected to reflect Vorbis or APEv2 naming conventions.
+    Translations to other tagging formats is supported as far as ...
+        mutagen.File(path, easy=True)
+    ... support goes.
+  
     The remaining (4th, ...) parts are used to supply values for the tag.
     If no values are given, the tag should be removed from the target file;
     otherwise, the tag should be given the supplied values in the target file.
@@ -65,12 +71,12 @@ DESCRIPTION
     then this is indicated by outputting a tab delimited line with
         the name of the file
         the name of the tag
-        the old values
+        tab delimited old values
         →
-        the new values
+        tab delimited new values
     
-    tags just reports the changes that should be made but does not make them.
-    unless the --run option is specified.
+    tags just reports the changes that should be made
+    but does not save them unless the --save option is specified.
 
 EXAMPLES
 
@@ -125,7 +131,7 @@ EXAMPLES
 """
     ),
 )
-parser.add_argument("-r", "--run", action="store_true", help="change files")
+parser.add_argument("-s", "--save", action="store_true", help="save changes")
 parser.add_argument(
     "-t", "--tags", action="store", default="tags", help="name of tags files"
 )
@@ -209,17 +215,19 @@ for line in sys.stdin:
     tp = tags(path)
     if 0 < len(tp):
         try:
-            f = mutagen.File(path)
+            f = mutagen.File(path, easy=True)
         except Exception as e:
             sys.stderr.write("\t".join([p, str(e)]))
             continue
+        save = False
         for k, vp in tp.items():
             vf = [] if not k in f.tags else f.tags[k]
             if 0 != cmpl(vf, vp):
                 print("\t".join([p, k, *vf, "→", *vp]))
-                if args.run:
-                    if 0 < len(vp):
-                        f.tags[k] = vp
-                    else:
-                        del f.tags[k]
-                    f.save()
+                if 0 < len(vp):
+                    f.tags[k] = vp
+                else:
+                    del f.tags[k]
+                save = True
+        if save and args.save:
+            f.save()
