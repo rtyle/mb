@@ -69,8 +69,8 @@ DESCRIPTION
     If the value(s) of a tag in a target file differs
     from the value(s) suggested by the application of its rules
     then this is indicated by outputting a tab delimited line with
-        the name of the file
-        the name of the tag
+        file path
+        tag key
         tab delimited old values
         →
         tab delimited new values
