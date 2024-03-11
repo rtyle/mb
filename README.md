@@ -29,6 +29,12 @@ See built-in help.
 
     ./collectiondiff --help
 
+### fixsidecar
+Fix sidecar relationships by matching file stems and renaming them.
+See built-in help.
+
+    ./fixsidecar --help
+
 ### lsmb
 List details of each MusicBrainz release identified on stdin.
 See built-in help.

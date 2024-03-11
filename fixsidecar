@@ -28,7 +28,7 @@ def match(s: str) -> re.Pattern:
 
 parser = argparse.ArgumentParser(
     formatter_class=argparse.RawDescriptionHelpFormatter,
-    description="Fix sidecar file names by matching stems and renaming them",
+    description="Fix sidecar relationships by matching file stems and renaming them",
     epilog=textwrap.dedent(
         """
 SYNOPSIS
