@@ -1,0 +1,109 @@
+#!/usr/bin/python
+
+import argparse
+import pathlib
+import re
+import sys
+import textwrap
+
+
+def cmp(a, b) -> int:
+    return -1 if a < b else 1 if b < a else 0
+
+
+def cmpl(al: list, bl: list) -> int:
+    for a, b in zip(al, bl):
+        c = cmp(a, b)
+        if 0 != c:
+            return c
+    return -1 if len(al) < len(bl) else 1 if len(bl) < len(al) else 0
+
+
+def match(s: str) -> re.Pattern:
+    try:
+        return re.compile(s)
+    except re.error as e:
+        raise argparse.ArgumentTypeError(s)
+
+
+parser = argparse.ArgumentParser(
+    formatter_class=argparse.RawDescriptionHelpFormatter,
+    description="Fix sidecar file names by matching stems and renaming them",
+    epilog=textwrap.dedent(
+        """
+SYNOPSIS
+    find . -depth | fixsidecar
+
+DESCRIPTION
+    Sidecar paths with the same parent are related by having an identical path
+    stem (the final path component, without its suffix).
+
+    Such a weak sidecar relationship can be broken
+    by renaming one or more of the stems in the relationship
+    so that the stems are no longer identical.
+    This can be fixed if the stems can be matched and are made identical.
+
+    Child paths are read from stdin.
+    Siblings of each child are evaluated for a potential sidecar match.
+
+    A match is determined if, for both the child and sibling stem,
+    the same results are had by evaluating the python expression
+        re.findall(MATCH, stem)
+
+    A match is indicated by outputting a tab delimited line with
+        parent path
+        sibling stem
+        →
+        child stem
+        sibling suffix
+
+    Only if the --rename option is given are matches renamed.
+
+EXAMPLES
+
+    Expect that audio files should have sidecar relationships with
+    siblings with a .txt suffix if the first word in their stems match.
+
+        find . -name \*.flac -o -name \*.mp3 | fixsidecar
+
+    This is useful to re-establish sidecar file relationships
+    with audio files that were renamed by MusicBrainz Picard.
+    Typically, Picard will (re)name audio files using
+    the same release/directory unique track number as the first word.
+"""
+    ),
+)
+parser.add_argument(
+    "-m",
+    "--match",
+    action="store",
+    type=match,
+    default="^\S+",
+    help="match pattern, defaults to ^\S+",
+)
+parser.add_argument(
+    "-s", "--suffix", action="append", help="a sidecar suffix, defaults to only .txt"
+)
+parser.add_argument("-r", "--rename", action="store_true", help="rename matches")
+args = parser.parse_args()
+
+if None is args.suffix:
+    args.suffix = [".txt"]
+
+for line in sys.stdin:
+    child = pathlib.Path(line.rstrip())
+    if 0 == len(child.parents):
+        continue
+    child_match = re.findall(args.match, child.stem)
+    parent, *_ = child.parents
+    for sibling in [
+        sibling
+        for sibling in parent.iterdir()
+        if sibling.stem != child.stem
+        and sibling.suffix in args.suffix
+        and 0 == cmpl(child_match, re.findall(args.match, sibling.stem))
+    ]:
+        print("\t".join([str(parent), sibling.stem, "→", child.stem, sibling.suffix]))
+        if args.rename:
+            sibling_rename = sibling.with_stem(child.stem)
+            sibling.rename(sibling_rename)
