@@ -166,7 +166,7 @@ def rules(parent: pathlib.Path) -> list[list[str]]:
                         r, b, *kv = parts
                         try:
                             r = re.compile(r)
-                        except Exception as e:
+                        except re.error as e:
                             sys.stderr.write("\t".join([str(child), *parts, e]))
                             continue
                         if 0 == len(b):
